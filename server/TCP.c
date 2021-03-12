@@ -11,6 +11,7 @@
 #include <netdb.h> 
 #include <errno.h>
 #include <time.h>
+#include <arpa/inet.h>
 
 #define SEND_MODE 0
 #define RECV_MODE 1
@@ -102,18 +103,33 @@ int main(int argc, char *argv[])
             fp = fopen(filename,"rb");
             if(!fp) error("Cannot open the file");
             
-            printf("file size : %ld\n", filestat.st_size);
+            if(filestat.st_size > 1048576)
+                printf("file size : %lf MB\n", (double)filestat.st_size / 1000000.0);
+            else if(filestat.st_size > 1024)
+                printf("file size : %lf KB\n", (double)filestat.st_size / 1000.0);
+            else
+                printf("file size : %ld B\n", filestat.st_size);
+            
             //傳送檔名
             printf("%s\n", filename);
             n = write(newsockfd,filename,256);
+            if (n < 0) 
+                    error("ERROR writing to socket");
+
+            n = write(newsockfd,&filestat,sizeof(filestat));
+            if (n < 0) 
+                    error("ERROR writing to socket");
             
 
             n = read(newsockfd,buffer,BUFF_SIZE);
             if (n < 0) error("Client Doesn't recieve filename");
             printf("Here is the message: %s\n",buffer);
 
+            //傳送檔案
             long int sendsize = 0;
             int stage = 0;
+            char curtime[80];
+            exetime = clock();
             while(!feof(fp)){
                 n = fread(buffer, sizeof(char), BUFF_SIZE, fp);
                 if (n < 0) error("ERROR reading from file");
@@ -124,21 +140,31 @@ int main(int argc, char *argv[])
                 sendsize += n;
                 //printf("%ld / %ld\n", sendsize, filestat.st_size);
                 if((double)sendsize / (double)filestat.st_size > 0.25 && stage == 0){
-                    printf("25%%\n");
+                    rawtime = time(NULL);
+                    strftime (curtime,80,"%r\n",localtime (&rawtime));
+                    printf("25%% %s", curtime);
                     ++stage;
                 }
-                else if((double)sendsize / (double)filestat.st_size > 0.5 && stage == 1){
-                    printf("50%%\n");
+                if((double)sendsize / (double)filestat.st_size > 0.5 && stage == 1){
+                    rawtime = time(NULL);
+                    strftime (curtime,80,"%r\n",localtime (&rawtime));
+                    printf("50%% %s", curtime);
                     ++stage;
                 }
-                else if((double)sendsize / (double)filestat.st_size > 0.75 && stage == 2){
-                    printf("75%%\n");
+                if((double)sendsize / (double)filestat.st_size > 0.75 && stage == 2){
+                    rawtime = time(NULL);
+                    strftime (curtime,80,"%r\n",localtime (&rawtime));
+                    printf("75%% %s", curtime);
                     ++stage;
                 }
                 
             }
-            
-            printf("100%%\n");
+            exetime = clock() - exetime;
+            rawtime = time(NULL);
+            strftime (curtime,80,"%r\n",localtime (&rawtime));
+            printf("100%% %s", curtime);
+
+            printf("Total trans time : %f ms\n", exetime * 1000.0 / CLOCKS_PER_SEC );
             fclose(fp);
             close(newsockfd);
         }
@@ -155,9 +181,7 @@ int main(int argc, char *argv[])
             }
             bzero((char *) &serv_addr, sizeof(serv_addr));
             serv_addr.sin_family = AF_INET;
-            bcopy((char *)server->h_addr, 
-                (char *)&serv_addr.sin_addr.s_addr,
-                server->h_length);
+            serv_addr.sin_addr.s_addr = inet_addr(argv[3]);
             serv_addr.sin_port = htons(portno);
             if (connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) 
                 error("ERROR connecting");
@@ -166,11 +190,20 @@ int main(int argc, char *argv[])
             read(sockfd, filename, 256);
             char * pch, tp[10];
             pch = (char*) memchr(filename, '.', 256);
-            printf("%s\n",pch);
+            //printf("%s\n",pch);
             strcpy(tp, pch);
             strcpy(pch,"_recv");
             strcat(filename, tp);
             printf("%s\n",filename);
+
+            n = read(sockfd, &filestat, sizeof(filestat));
+            if(filestat.st_size > 1048576)
+                printf("file size : %lf MB\n", (double)filestat.st_size / 1000000.0);
+            else if(filestat.st_size > 1024)
+                printf("file size : %lf KB\n", (double)filestat.st_size / 1000.0);
+            else
+                printf("file size : %ld B\n", filestat.st_size);
+
             //建立檔案
             fp = fopen(filename,"wb");
             if(!fp) error("Cannot open the file\n");
@@ -182,16 +215,46 @@ int main(int argc, char *argv[])
             n = write(sockfd,buffer,strlen(buffer));
             if (n < 0) 
                     error("ERROR writing to socket");
+
+            long int sendsize = 0;
+            int stage = 0;
+            char curtime[80];
+            exetime = clock();
             while(1){
                 n = read(sockfd, buffer,BUFF_SIZE);
                 if (n < 0) 
                     error("ERROR recieving from server");
                 if (n == 0) 
                     break;
-                printf("client got %d bytes\n", n);    
+                //printf("client got %d bytes\n", n);    
                 n = fwrite(buffer, sizeof(char), n, fp);
-                printf("fwrite %d bytes\n", n);
+                //printf("fwrite %d bytes\n", n);
+                sendsize += n;
+                if((double)sendsize / (double)filestat.st_size > 0.25 && stage == 0){
+                    rawtime = time(NULL);
+                    strftime (curtime,80,"%r\n",localtime (&rawtime));
+                    printf("25%% %s", curtime);
+                    ++stage;
+                }
+                if((double)sendsize / (double)filestat.st_size > 0.5 && stage == 1){
+                    rawtime = time(NULL);
+                    strftime (curtime,80,"%r\n",localtime (&rawtime));
+                    printf("50%% %s", curtime);
+                    ++stage;
+                }
+                if((double)sendsize / (double)filestat.st_size > 0.75 && stage == 2){
+                    rawtime = time(NULL);
+                    strftime (curtime,80,"%r\n",localtime (&rawtime));
+                    printf("75%% %s", curtime);
+                    ++stage;
+                }
             }
+            exetime = clock() - exetime;
+            rawtime = time(NULL);
+            strftime (curtime,80,"%r\n",localtime (&rawtime));
+            printf("100%% %s", curtime);
+            printf("Total trans time : %f ms\n", exetime * 1000.0 / CLOCKS_PER_SEC );
+
             fflush(fp);
             fclose(fp);
         }
@@ -235,8 +298,7 @@ int main(int argc, char *argv[])
             //等待request
             char feedback[256];
             clilen = sizeof(cli_addr);
-            while (1)
-            {
+            while (1){
                 printf("wait...\n");
                 n = recvfrom(sockfd, feedback, 256, 0,
                             (struct sockaddr *)&cli_addr, &clilen);
@@ -252,8 +314,7 @@ int main(int argc, char *argv[])
                         printf("client:%s\n", feedback);
                         break;
                     }
-                    else
-                    {
+                    else{
                         error("wrong request");
                     }
                 }
@@ -265,8 +326,7 @@ int main(int argc, char *argv[])
                         (struct sockaddr *)&cli_addr, clilen);
             if(n == -1) error("error sending filename");
             //確認收到
-            while (1)
-            {
+            while (1){
                 n = recvfrom(sockfd, feedback, 256, 0,
                             (struct sockaddr *)&cli_addr, &clilen);
                 if(n == -1){
@@ -285,9 +345,36 @@ int main(int argc, char *argv[])
                     }                    
                 }
             }
+
+            //傳送檔案資訊
+            printf("%s\n", filename);
+            n = sendto(sockfd, &filestat, sizeof(filestat), 0,
+                        (struct sockaddr *)&cli_addr, clilen);
+            if(n == -1) error("error sending filename");
+            //確認收到
+            while (1){
+                n = recvfrom(sockfd, feedback, 256, 0,
+                            (struct sockaddr *)&cli_addr, &clilen);
+                if(n == -1){
+                    if (errno == EINTR)
+                        continue;
+                    error("reciving fail");
+                }
+                
+                if(n >-1){
+                    if(!strcmp(feedback, "Got filestat")){
+                        printf("client:%s\n", feedback);
+                        break;
+                    }
+                    else{
+                        error("client don't get filestat");
+                    }                    
+                }
+            }
             long int sendsize = 0;
             int stage = 0;
             char curtime[80];
+
             //傳送檔案
             exetime = clock();
             while (!feof(fp))
@@ -350,7 +437,7 @@ int main(int argc, char *argv[])
             strftime (curtime,80,"%r\n",localtime (&rawtime));
             printf("100%% %s", curtime);
 
-            printf("Total trans time : %f ms", exetime * 1000.0 / CLOCKS_PER_SEC );
+            printf("Total trans time : %f ms\n", exetime * 1000.0 / CLOCKS_PER_SEC );
             fclose(fp);
         }
         else if(mode == RECV_MODE){
@@ -363,9 +450,7 @@ int main(int argc, char *argv[])
             memset(&serv_addr, 0, sizeof(serv_addr));
             serv_addr.sin_family = AF_INET;
             serv_addr.sin_port = htons(portno);
-            bcopy((char *)server->h_addr, 
-                (char *)&serv_addr.sin_addr.s_addr,
-                server->h_length);
+            serv_addr.sin_addr.s_addr = inet_addr(argv[3]);
 
             char feedback[256];
             strcpy(feedback,"Request");
@@ -392,10 +477,33 @@ int main(int argc, char *argv[])
                     }                    
                 }
             }
-            //傳送已收到
+            //傳送已收到檔案名稱
             strcpy(feedback,"Got filename");
             n = sendto(sockfd, feedback, 256, 0, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
             if(n == -1) error("error sending \"Got filename\"");
+
+            //接收檔案資訊
+            while (1){
+                n = recvfrom(sockfd, &filestat, sizeof(filestat), 0,
+                            NULL, NULL);
+                if(n == -1){
+                    if (errno == EINTR)
+                        continue;
+                    error("reciving fail");
+                }                
+                if(n >-1){
+                    if(n > 0){
+                        break;
+                    }
+                    else{
+                        error("client don't get filename");
+                    }                    
+                }
+            }
+            //傳送已收到檔案資訊
+            strcpy(feedback,"Got filestat");
+            n = sendto(sockfd, feedback, 256, 0, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+            if(n == -1) error("error sending \"Got filestat\"");
 
             //建立檔案
             char * pch, tp[10];
@@ -409,7 +517,19 @@ int main(int argc, char *argv[])
             fp = fopen(filename,"wb");
             if(!fp) error("Cannot open the file");
 
+            //印出檔案大小
+            if(filestat.st_size > 1048576)
+                printf("file size : %lf MB\n", (double)filestat.st_size / 1000000.0);
+            else if(filestat.st_size > 1024)
+                printf("file size : %lf KB\n", (double)filestat.st_size / 1000.0);
+            else
+                printf("file size : %ld B\n", filestat.st_size);
+
+            long int sendsize = 0;
+            int stage = 0;
+            char curtime[80];
             //接收檔案
+            exetime = clock();
             while(1){
                 n = recvfrom(sockfd, buffer, BUFF_SIZE, 0,
                             NULL, NULL);
@@ -420,7 +540,7 @@ int main(int argc, char *argv[])
                 }
                 else if(n > -1){
                     if(n > 0){
-                        printf("client got %d bytes\n", n);
+                       // printf("client got %d bytes\n", n);
                     }
                     else{
                         break;
@@ -428,16 +548,43 @@ int main(int argc, char *argv[])
                 }
 
                 n = fwrite(buffer, sizeof(char), n, fp);
-                printf("fwrite %d bytes\n", n);
+                //printf("fwrite %d bytes\n", n);
 
+                sendsize += n;
                 strcpy(feedback,"Got file");
-                printf("%s\n",feedback);
+                //printf("%s\n",feedback);
                 n = sendto(sockfd, feedback, 256, 0, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
                 if(n == -1) error("error sending \"Got filename\"");
                 
-                printf("send got file\n");                
+                //printf("send got file\n");
+
+                if((double)sendsize / (double)filestat.st_size > 0.25 && stage == 0){
+                    rawtime = time(NULL);
+                    strftime (curtime,80,"%r\n",localtime (&rawtime));
+                    printf("25%% %s", curtime);
+                    ++stage;
+                }
+                if((double)sendsize / (double)filestat.st_size > 0.5 && stage == 1){
+                    rawtime = time(NULL);
+                    strftime (curtime,80,"%r\n",localtime (&rawtime));
+                    printf("50%% %s", curtime);
+                    ++stage;
+                }
+                if((double)sendsize / (double)filestat.st_size > 0.75 && stage == 2){
+                    rawtime = time(NULL);
+                    strftime (curtime,80,"%r\n",localtime (&rawtime));
+                    printf("75%% %s", curtime);
+                    ++stage;
+                }                
             }
             fflush(fp);
+
+            exetime = clock() - exetime;
+            rawtime = time(NULL);
+            strftime (curtime,80,"%r\n",localtime (&rawtime));
+            printf("100%% %s", curtime);
+
+            printf("Total trans time : %f ms\n", exetime * 1000.0 / CLOCKS_PER_SEC );
             fclose(fp);
         }
     }
