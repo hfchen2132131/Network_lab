@@ -11,6 +11,7 @@
 #include <netdb.h> 
 #include <errno.h>
 #include <time.h>
+#include <sys/time.h>
 #include <arpa/inet.h>
 
 #define SEND_MODE 0
@@ -41,6 +42,8 @@ int main(int argc, char *argv[])
     int n;
     time_t rawtime;
     clock_t exetime;
+    struct timeval start;
+    struct timeval end;
 
     
     
@@ -129,7 +132,7 @@ int main(int argc, char *argv[])
             long int sendsize = 0;
             int stage = 0;
             char curtime[80];
-            exetime = clock();
+            gettimeofday(&start, NULL);
             while(!feof(fp)){
                 n = fread(buffer, sizeof(char), BUFF_SIZE, fp);
                 if (n < 0) error("ERROR reading from file");
@@ -159,12 +162,12 @@ int main(int argc, char *argv[])
                 }
                 
             }
-            exetime = clock() - exetime;
+            gettimeofday(&end, NULL);
             rawtime = time(NULL);
             strftime (curtime,80,"%r\n",localtime (&rawtime));
             printf("100%% %s", curtime);
-
-            printf("Total trans time : %f ms\n", exetime * 1000.0 / CLOCKS_PER_SEC );
+            double ttime = (end.tv_sec-start.tv_sec) + ((double) end.tv_usec - (double) start.tv_usec)/ 1000000.0;
+            printf("Total trans time : %lf sec\n", ttime);
             fclose(fp);
             close(newsockfd);
         }
@@ -216,10 +219,11 @@ int main(int argc, char *argv[])
             if (n < 0) 
                     error("ERROR writing to socket");
 
+            //接收檔案
             long int sendsize = 0;
             int stage = 0;
             char curtime[80];
-            exetime = clock();
+            gettimeofday(&start, NULL);
             while(1){
                 n = read(sockfd, buffer,BUFF_SIZE);
                 if (n < 0) 
@@ -249,11 +253,12 @@ int main(int argc, char *argv[])
                     ++stage;
                 }
             }
-            exetime = clock() - exetime;
+            gettimeofday(&end, NULL);
             rawtime = time(NULL);
             strftime (curtime,80,"%r\n",localtime (&rawtime));
             printf("100%% %s", curtime);
-            printf("Total trans time : %f ms\n", exetime * 1000.0 / CLOCKS_PER_SEC );
+            double ttime = (end.tv_sec-start.tv_sec) + ((double) end.tv_usec - (double) start.tv_usec)/ 1000000.0;
+            printf("Total trans time : %lf sec\n", ttime);
 
             fflush(fp);
             fclose(fp);
@@ -376,7 +381,7 @@ int main(int argc, char *argv[])
             char curtime[80];
 
             //傳送檔案
-            exetime = clock();
+            gettimeofday(&start, NULL);
             while (!feof(fp))
             {
                 n = fread(buffer, sizeof(char), BUFF_SIZE, fp);
@@ -430,14 +435,14 @@ int main(int argc, char *argv[])
                     ++stage;
                 }
             }
-            exetime = clock() - exetime;
+            gettimeofday(&end, NULL);
             n = sendto(sockfd, buffer, 0, 0,
                         (struct sockaddr *)&cli_addr, clilen);
             rawtime = time(NULL);
             strftime (curtime,80,"%r\n",localtime (&rawtime));
             printf("100%% %s", curtime);
-
-            printf("Total trans time : %f ms\n", exetime * 1000.0 / CLOCKS_PER_SEC );
+            double ttime = (end.tv_sec-start.tv_sec) + ((double) end.tv_usec - (double) start.tv_usec)/ 1000000.0;
+            printf("Total trans time : %lf sec\n", ttime );
             fclose(fp);
         }
         else if(mode == RECV_MODE){
@@ -529,7 +534,7 @@ int main(int argc, char *argv[])
             int stage = 0;
             char curtime[80];
             //接收檔案
-            exetime = clock();
+            gettimeofday(&start, NULL);
             while(1){
                 n = recvfrom(sockfd, buffer, BUFF_SIZE, 0,
                             NULL, NULL);
@@ -579,12 +584,12 @@ int main(int argc, char *argv[])
             }
             fflush(fp);
 
-            exetime = clock() - exetime;
+            gettimeofday(&end, NULL);
             rawtime = time(NULL);
             strftime (curtime,80,"%r\n",localtime (&rawtime));
             printf("100%% %s", curtime);
-
-            printf("Total trans time : %f ms\n", exetime * 1000.0 / CLOCKS_PER_SEC );
+            double ttime = (end.tv_sec-start.tv_sec) + ((double) end.tv_usec - (double) start.tv_usec)/ 1000000.0;
+            printf("Total trans time : %lf sec\n", ttime);
             fclose(fp);
         }
     }
