@@ -29,9 +29,8 @@ void error(const char *msg)
 
 int main(int argc, char *argv[])
 {
-    int mode;
-    int prot;
-    char ip[15];
+    int mode; //TCP or UDP
+    int prot; //SEND or RECV
 
     int sockfd, newsockfd, portno;
     socklen_t clilen;
@@ -40,16 +39,15 @@ int main(int argc, char *argv[])
     struct sockaddr_in serv_addr, cli_addr;
     struct hostent *server;
     int n;
-    time_t rawtime;
-    clock_t exetime;
-    struct timeval start;
+    time_t rawtime;//for time stamp
+    struct timeval start;//for trans time
     struct timeval end;
 
     
     
     char filename[256];
     FILE *fp;
-    struct stat filestat;
+    struct stat filestat;//for file size
     
      
     
@@ -75,6 +73,8 @@ int main(int argc, char *argv[])
 
     if(prot == TCP_PROT){
         if(mode == SEND_MODE){
+            //TCP and SEND
+
             sockfd = socket(AF_INET, SOCK_STREAM, 0);
             if (sockfd < 0)
                 error("ERROR opening socket");
@@ -105,7 +105,7 @@ int main(int argc, char *argv[])
             }
             fp = fopen(filename,"rb");
             if(!fp) error("Cannot open the file");
-            
+            //獲取檔案大小
             if(filestat.st_size > 1048576)
                 printf("file size : %lf MB\n", (double)filestat.st_size / 1000000.0);
             else if(filestat.st_size > 1024)
@@ -118,30 +118,32 @@ int main(int argc, char *argv[])
             n = write(newsockfd,filename,256);
             if (n < 0) 
                     error("ERROR writing to socket");
-
+            //傳送檔案大小
             n = write(newsockfd,&filestat,sizeof(filestat));
             if (n < 0) 
                     error("ERROR writing to socket");
             
-
+            //確認client收到
             n = read(newsockfd,buffer,BUFF_SIZE);
             if (n < 0) error("Client Doesn't recieve filename");
             printf("Here is the message: %s\n",buffer);
 
             //傳送檔案
-            long int sendsize = 0;
-            int stage = 0;
-            char curtime[80];
-            gettimeofday(&start, NULL);
+            long int sendsize = 0;//已傳送的大小
+            int stage = 0;//分辨25% 50% 75%
+            char curtime[80];//for time stamp
+            gettimeofday(&start, NULL);//開始計時
             while(!feof(fp)){
+                //讀檔
                 n = fread(buffer, sizeof(char), BUFF_SIZE, fp);
                 if (n < 0) error("ERROR reading from file");
-                //printf("read %d bytes from file\n", n);
+                //傳送
                 n = write(newsockfd,buffer,n);
                 if (n < 0) error("ERROR writing to socket");
-                //printf("send %d bytes to client\n", n);
-                sendsize += n;
-                //printf("%ld / %ld\n", sendsize, filestat.st_size);
+
+                sendsize += n;//累積傳送大小
+
+                //顯示已經傳了25% 50% 75%
                 if((double)sendsize / (double)filestat.st_size > 0.25 && stage == 0){
                     rawtime = time(NULL);
                     strftime (curtime,80,"%r\n",localtime (&rawtime));
@@ -162,18 +164,23 @@ int main(int argc, char *argv[])
                 }
                 
             }
-            gettimeofday(&end, NULL);
+            gettimeofday(&end, NULL);//停止計時
+
             rawtime = time(NULL);
             strftime (curtime,80,"%r\n",localtime (&rawtime));
             printf("100%% %s", curtime);
+
+            //計算trans time
             double ttime = (end.tv_sec-start.tv_sec) + ((double) end.tv_usec - (double) start.tv_usec)/ 1000000.0;
-            printf("Total trans time : %lf sec\n", ttime);
+            printf("Total trans time : %lf ms\n", ttime *1000);
             fclose(fp);
             close(newsockfd);
         }
         else if(mode == RECV_MODE)
         {
-            portno = atoi(argv[4]);
+            //TCP RECV
+
+            portno = atoi(argv[4]);//get port
             sockfd = socket(AF_INET, SOCK_STREAM, 0);
             if (sockfd < 0) 
                 error("ERROR opening socket\n");
@@ -193,12 +200,14 @@ int main(int argc, char *argv[])
             read(sockfd, filename, 256);
             char * pch, tp[10];
             pch = (char*) memchr(filename, '.', 256);
-            //printf("%s\n",pch);
+
+            //把檔名改成xxx_recv.xxx
             strcpy(tp, pch);
             strcpy(pch,"_recv");
             strcat(filename, tp);
             printf("%s\n",filename);
 
+            //接收檔案大小
             n = read(sockfd, &filestat, sizeof(filestat));
             if(filestat.st_size > 1048576)
                 printf("file size : %lf MB\n", (double)filestat.st_size / 1000000.0);
@@ -211,29 +220,31 @@ int main(int argc, char *argv[])
             fp = fopen(filename,"wb");
             if(!fp) error("Cannot open the file\n");
 
-            //printf("Please enter the message: ");
+            //回覆已收到
             bzero(buffer,BUFF_SIZE);
-            //fgets(buffer,255,stdin);
             strcpy(buffer,"I got Filename");
             n = write(sockfd,buffer,strlen(buffer));
             if (n < 0) 
                     error("ERROR writing to socket");
 
             //接收檔案
-            long int sendsize = 0;
-            int stage = 0;
-            char curtime[80];
-            gettimeofday(&start, NULL);
+            long int sendsize = 0;//已傳送的大小
+            int stage = 0;//分辨25% 50% 75%
+            char curtime[80];//for time stamp
+            gettimeofday(&start, NULL);//開始計時
             while(1){
+                //接收
                 n = read(sockfd, buffer,BUFF_SIZE);
                 if (n < 0) 
                     error("ERROR recieving from server");
                 if (n == 0) 
                     break;
-                //printf("client got %d bytes\n", n);    
+                //寫入檔案   
                 n = fwrite(buffer, sizeof(char), n, fp);
-                //printf("fwrite %d bytes\n", n);
-                sendsize += n;
+
+                sendsize += n;//累積傳送大小
+
+                //顯示已經傳了25% 50% 75%
                 if((double)sendsize / (double)filestat.st_size > 0.25 && stage == 0){
                     rawtime = time(NULL);
                     strftime (curtime,80,"%r\n",localtime (&rawtime));
@@ -253,12 +264,15 @@ int main(int argc, char *argv[])
                     ++stage;
                 }
             }
-            gettimeofday(&end, NULL);
+            gettimeofday(&end, NULL);//停止計時
+
             rawtime = time(NULL);
             strftime (curtime,80,"%r\n",localtime (&rawtime));
             printf("100%% %s", curtime);
+
+            //計算trans time
             double ttime = (end.tv_sec-start.tv_sec) + ((double) end.tv_usec - (double) start.tv_usec)/ 1000000.0;
-            printf("Total trans time : %lf sec\n", ttime);
+            printf("Total trans time : %lf ms\n", ttime*1000);
 
             fflush(fp);
             fclose(fp);
@@ -266,6 +280,8 @@ int main(int argc, char *argv[])
     }
     else if(prot == UDP_PROT){
         if(mode == SEND_MODE){
+            //UDP SEND
+
             sockfd = socket(PF_INET, SOCK_DGRAM, 0);
             if (sockfd < 0)
                 error("ERROR opening socket");
@@ -299,21 +315,18 @@ int main(int argc, char *argv[])
             else
                 printf("file size : %ld B\n", filestat.st_size);
             
-            
-            //等待request
             char feedback[256];
             clilen = sizeof(cli_addr);
             while (1){
+                //等待request
                 printf("wait...\n");
                 n = recvfrom(sockfd, feedback, 256, 0,
                             (struct sockaddr *)&cli_addr, &clilen);
-                
                 if(n == -1){
                     if (errno == EINTR)
                         continue;
                     error("reciving fail");
                 }
-
                 if(n >-1){
                     if(!strcmp(feedback, "Request")){
                         printf("client:%s\n", feedback);
@@ -330,6 +343,7 @@ int main(int argc, char *argv[])
             n = sendto(sockfd, filename, 256, 0,
                         (struct sockaddr *)&cli_addr, clilen);
             if(n == -1) error("error sending filename");
+
             //確認收到
             while (1){
                 n = recvfrom(sockfd, feedback, 256, 0,
@@ -339,7 +353,6 @@ int main(int argc, char *argv[])
                         continue;
                     error("reciving fail");
                 }
-                
                 if(n >-1){
                     if(!strcmp(feedback, "Got filename")){
                         printf("client:%s\n", feedback);
@@ -356,6 +369,7 @@ int main(int argc, char *argv[])
             n = sendto(sockfd, &filestat, sizeof(filestat), 0,
                         (struct sockaddr *)&cli_addr, clilen);
             if(n == -1) error("error sending filename");
+
             //確認收到
             while (1){
                 n = recvfrom(sockfd, feedback, 256, 0,
@@ -365,7 +379,6 @@ int main(int argc, char *argv[])
                         continue;
                     error("reciving fail");
                 }
-                
                 if(n >-1){
                     if(!strcmp(feedback, "Got filestat")){
                         printf("client:%s\n", feedback);
@@ -376,23 +389,27 @@ int main(int argc, char *argv[])
                     }                    
                 }
             }
-            long int sendsize = 0;
-            int stage = 0;
-            char curtime[80];
+            long int sendsize = 0;//已傳送的大小
+            int stage = 0;//分辨25% 50% 75%
+            char curtime[80];//for time stamp
 
             //傳送檔案
-            gettimeofday(&start, NULL);
+            gettimeofday(&start, NULL);//開始計時
             while (!feof(fp))
             {
+                //讀檔
                 n = fread(buffer, sizeof(char), BUFF_SIZE, fp);
                 if (n < 0) error("ERROR reading from file");
-                //printf("read %d bytes from file\n", n);
+
+                //傳送
                 n = sendto(sockfd, buffer, n, 0,
                         (struct sockaddr *)&cli_addr, clilen);
                 if(n == -1) error("error sending file");
-                //printf("send %d to client\n", n);
+
+                //累積傳送大小
                 sendsize += n;
                 
+                //確認client收到檔案
                 n = recvfrom(sockfd, feedback, BUFF_SIZE, 0,
                             (struct sockaddr *)&cli_addr, &clilen);
                 if (n == -1)
@@ -404,18 +421,14 @@ int main(int argc, char *argv[])
                 }
                 else if(n > -1)
                 {
-                    if(!strcmp(feedback, "Got file")){
-                        //printf("client:%s\n", feedback);
-                        
-                    }
+                    if(!strcmp(feedback, "Got file")){}
                     else{
-                        //printf("client:%s\n",feedback);
                         error("client don't get file");
                     }    
                 }
 
                 
-                //printf("%ld / %ld\n", sendsize, filestat.st_size);
+                //顯示已經傳了25% 50% 75%
                 if((double)sendsize / (double)filestat.st_size > 0.25 && stage == 0){
                     rawtime = time(NULL);
                     strftime (curtime,80,"%r\n",localtime (&rawtime));
@@ -435,17 +448,22 @@ int main(int argc, char *argv[])
                     ++stage;
                 }
             }
-            gettimeofday(&end, NULL);
+            gettimeofday(&end, NULL);//停止計時
+
+            //傳送結束傳送訊號
             n = sendto(sockfd, buffer, 0, 0,
                         (struct sockaddr *)&cli_addr, clilen);
+            
             rawtime = time(NULL);
             strftime (curtime,80,"%r\n",localtime (&rawtime));
             printf("100%% %s", curtime);
             double ttime = (end.tv_sec-start.tv_sec) + ((double) end.tv_usec - (double) start.tv_usec)/ 1000000.0;
-            printf("Total trans time : %lf sec\n", ttime );
+            printf("Total trans time : %lf ms\n", ttime *1000);
             fclose(fp);
         }
         else if(mode == RECV_MODE){
+            //UDP RECV
+
             portno = atoi(argv[4]);
             server = gethostbyname(argv[3]);
             sockfd = socket(PF_INET, SOCK_DGRAM, 0);
@@ -482,6 +500,7 @@ int main(int argc, char *argv[])
                     }                    
                 }
             }
+
             //傳送已收到檔案名稱
             strcpy(feedback,"Got filename");
             n = sendto(sockfd, feedback, 256, 0, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
@@ -513,12 +532,14 @@ int main(int argc, char *argv[])
             //建立檔案
             char * pch, tp[10];
             pch = (char*) memchr(filename, '.', 256);
-            //printf("%s\n",pch);
+
+            //把檔名改成xxx_recv.xxx
             strcpy(tp, pch);
             strcpy(pch,"_recv");
             strcat(filename, tp);
             printf("%s\n",filename);
 
+            //建立檔案
             fp = fopen(filename,"wb");
             if(!fp) error("Cannot open the file");
 
@@ -530,12 +551,12 @@ int main(int argc, char *argv[])
             else
                 printf("file size : %ld B\n", filestat.st_size);
 
-            long int sendsize = 0;
-            int stage = 0;
-            char curtime[80];
-            //接收檔案
-            gettimeofday(&start, NULL);
+            long int sendsize = 0;//已傳送的大小
+            int stage = 0;//分辨25% 50% 75%
+            char curtime[80];//for time stamp
+            gettimeofday(&start, NULL);//開始計時
             while(1){
+                //接收
                 n = recvfrom(sockfd, buffer, BUFF_SIZE, 0,
                             NULL, NULL);
                 if (n == -1){
@@ -545,24 +566,23 @@ int main(int argc, char *argv[])
                 }
                 else if(n > -1){
                     if(n > 0){
-                       // printf("client got %d bytes\n", n);
                     }
                     else{
                         break;
                     }    
                 }
 
+                //寫入檔案
                 n = fwrite(buffer, sizeof(char), n, fp);
-                //printf("fwrite %d bytes\n", n);
 
-                sendsize += n;
+                sendsize += n;//累積傳送大小
+
+                //回覆已收到
                 strcpy(feedback,"Got file");
-                //printf("%s\n",feedback);
                 n = sendto(sockfd, feedback, 256, 0, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
                 if(n == -1) error("error sending \"Got filename\"");
                 
-                //printf("send got file\n");
-
+                //顯示已經傳了25% 50% 75%
                 if((double)sendsize / (double)filestat.st_size > 0.25 && stage == 0){
                     rawtime = time(NULL);
                     strftime (curtime,80,"%r\n",localtime (&rawtime));
@@ -584,12 +604,13 @@ int main(int argc, char *argv[])
             }
             fflush(fp);
 
-            gettimeofday(&end, NULL);
+            gettimeofday(&end, NULL);//停止計時
             rawtime = time(NULL);
             strftime (curtime,80,"%r\n",localtime (&rawtime));
             printf("100%% %s", curtime);
             double ttime = (end.tv_sec-start.tv_sec) + ((double) end.tv_usec - (double) start.tv_usec)/ 1000000.0;
-            printf("Total trans time : %lf sec\n", ttime);
+            printf("Total trans time : %lf ms\n", ttime*1000);
+            printf("packet loss rate : %3.2f%%\n" , 100.0 - 100 * ( (double)sendsize / (double)filestat.st_size));
             fclose(fp);
         }
     }
