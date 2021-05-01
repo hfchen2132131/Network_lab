@@ -6,6 +6,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <errno.h>
+
+#define BUFF_SIZE 65500
  
 struct sockaddr_in localSock;
 struct ip_mreq group;
@@ -71,18 +75,82 @@ int main(int argc, char *argv[])
 	else
 		printf("Adding multicast group...OK.\n");
 	 
+
+    char filename[256],fname[256];
+    FILE *fp;
+    struct stat filestat;//for file size
+    char *buffer;
+    buffer = (char*)malloc(BUFF_SIZE);
+    int n = 0;
+
+    //建立檔案
+    strcpy(fname,"recv_tp");
+    if(argv[1] != NULL)
+        strcat(fname,argv[1]);
+    fp = fopen(fname,"wb");
+    if(!fp) perror("Cannot open the file");
+
 	/* Read from the socket. */
 	datalen = sizeof(databuf);
-	if(recvfrom(sd, databuf, datalen, 0, NULL, NULL) < 0)
+	if(recvfrom(sd, filename, 256, 0, NULL, NULL) < 0)
 	{
-		perror("Reading datagram message error");
+		perror("Reading datagram filename error");
 		close(sd);
 		exit(1);
 	}
 	else
 	{
-		printf("Reading datagram message...OK.\n");
-		printf("The message from multicast server is: \"%s\"\n", databuf);
+		printf("Reading datagram filename...OK.\n");
+		printf("The message from multicast server is: \"%s\"\n", filename);
 	}
+
+
+    long int sendsize = 0;//已傳送的大小
+    while(1){
+        //接收
+        n = recvfrom(sd, buffer, BUFF_SIZE, 0,
+                    NULL, NULL);
+        if (n < 0){
+            perror("Reading datagram file error");
+            close(sd);
+            exit(1);
+        }
+        //else printf("got!!\n");
+        if(n == 0) break;
+
+        //寫入檔案
+        n = fwrite(buffer, sizeof(char), n, fp);
+
+        sendsize += n;//累積傳送大小
+        
+        
+    }
+    //印出檔案大小
+    if(sendsize > 1048576)
+        printf("recieve file size : %lf MB\n", (double)sendsize / 1000000.0);
+    else if(sendsize > 1024)
+        printf("recieve file size : %lf KB\n", (double)sendsize / 1000.0);
+    else
+        printf("recieve file size : %ld B\n", sendsize);
+    fflush(fp);
+    fclose(fp);
+    close(sd);
+
+    char * pch, tp[10];
+    pch = (char*) memchr(filename, '.', 256);
+    //把檔名改成xxx_recv.xxx
+    strcpy(tp, pch);
+    strcpy(pch,"_recv");
+    if(argv[1] != NULL)
+        strcat(pch,argv[1]);
+    strcat(filename, tp);
+    printf("%s\n",filename);
+    char cmd[500];
+    strcpy(cmd,"mv ");
+    strcat(cmd,fname);
+    strcat(cmd," ");
+    strcat(cmd,filename);
+    system(cmd);
+
 	return 0;
 }

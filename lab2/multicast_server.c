@@ -7,6 +7,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <errno.h>
+
+
+#define BUFF_SIZE 65500
 
 struct in_addr localInterface;
 struct sockaddr_in groupSock;
@@ -54,13 +58,57 @@ int main (int argc, char *argv[ ])
 	char filename[256];
     FILE *fp;
     struct stat filestat;//for file size
+    char *buffer;
+    buffer = (char*)malloc(BUFF_SIZE);
 
-	if(sendto(sd, databuf, datalen, 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) < 0)
+	//讀取檔名
+	memset(filename,0,256);
+	strcpy(filename,argv[1]);
+	
+	//開啟檔案
+	if(lstat(filename, &filestat) < 0){
+		error("file wrong");
+	}
+	fp = fopen(filename,"rb");
+	if(!fp) error("Cannot open the file");
+
+    if(filestat.st_size > 1048576)
+        printf("file size : %lf MB\n", (double)filestat.st_size / 1000000.0);
+    else if(filestat.st_size > 1024)
+        printf("file size : %lf KB\n", (double)filestat.st_size / 1000.0);
+    else
+        printf("file size : %ld B\n", filestat.st_size);
+
+	if(sendto(sd, filename, 256, 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) < 0)
 	{
-		perror("Sending datagram message error");
+		perror("Sending datagram filename error");
 	}
 	else
-	  printf("Sending datagram message...OK\n");
+	  printf("Sending datagram filename...OK\n");
+    
+    int n = 0;
+
+    
+    //傳送檔案
+    long int sendsize = 0;//已傳送的大小
+    int stage = 0;//分辨25% 50% 75%
+    char curtime[80];//for time stamp
+    while(!feof(fp)){
+        //讀檔
+        n = fread(buffer, sizeof(char), BUFF_SIZE, fp);
+        if (n < 0) error("ERROR reading from file");
+        //傳送
+        n = sendto(sd, buffer,n, 0, (struct sockaddr*)&groupSock, sizeof(groupSock));
+        if (n < 0) error("ERROR writing to socket");
+
+        sendsize += n;//累積傳送大小   
+        //printf("send %d\n",sendsize);     
+    }
+    n = sendto(sd, "",0, 0, (struct sockaddr*)&groupSock, sizeof(groupSock));
+    if (n < 0) error("ERROR writing to socket");
+
+    fclose(fp);
+    close(sd);
 	 
 	/* Try the re-read from the socket if the loopback is not disable
 	if(read(sd, databuf, datalen) < 0)
